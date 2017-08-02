@@ -58,9 +58,6 @@ class ReportGenerator():
         self.csv_frame = object
         self.broadside_frame = object
         self.offbroadside_frame = object
-        
-     
-        
     #this method assumes that the antenna serial number starts with AA. This method will not work otherwise    
     def _getSerialNumber_(self,antenna_path):
         #reads the file directory and grabs the antenna serial number
@@ -120,10 +117,10 @@ class ReportGenerator():
             #print whichpath            
             header = ['frequency','Gain_dBi','Pattern_LPA','Pattern_PHI','Pattern_THETA','Frequencies (GZ)','Optimized S21 + cal (dBi) LPA90P0T0','Theoretical Directivity','NF2FF']
             self.ASN = self._getSerialNumber_(whichpath)
-            master_frame.to_csv(os.path.join(self.saveDirectory,self.ASN+"_Firstpass_Report_"+self.print_time +  '.csv'),columns = header)
-   
             
-            
+            master_frame.to_csv(os.path.join(self.saveDirectory,self.ASN+"_Firstpass_Report_"+self.print_time +  '.csv'),columns = header)  
+        
+        
         if self.report_type == 'sidelobe':
             #print 'processing sidelobe'
             sl_report = csvGenerator(sPath= self.saveDirectory,sl_path=self.sidelobe,reportType=self.report_type)
@@ -133,7 +130,6 @@ class ReportGenerator():
         """
         ******************************************RX Report PLOTs**********************************************************
         """
-    
         ax = plt.subplot(2,1,1)
         plt.cla()
         plt.title(self.ASN+ ' RX_DATA')
@@ -191,8 +187,10 @@ class ReportGenerator():
         ax.set_position([chartBox.x0,chartBox.y0,0.62,chartBox.height]) 
         ax.legend(loc="lower left", bbox_to_anchor=[1,0],ncol=1, shadow=True)
         #plt.xticks(numpy.arange(min(tx_frame['Frequencies (GZ)']), max(tx_frame['Frequencies (GZ)'])+0.1,0.1))
+        plt.autoscale(enable=True, axis='x', tight=True)
         plt.grid()
-        
+        plt.tight_layout(rect=[0,0,0.75,1])
+        plt.savefig(os.path.join(self.saveDirectory,self.ASN+'_'+'Firstpass_plot_'+self.print_time+'.png'))
   
 """
 Inherited from report generator. this class calculates theoratical directivy from the list of frequencies,gain + cal based on a cal frequency
@@ -265,7 +263,7 @@ class s2pGenerator(ReportGenerator):
             rx_index = s2p_frame[s2p_frame['Frequencies (GZ)']==11.8].index.tolist()
             s2p_frame.set_value(rx_index,'NF2FF',float(self.rx_nf2ff_directivity))
         
-        s2p_frame.sort_values(by =['Frequencies (GZ)'], ascending = True, inplace = True)
+        s2p_frame.sort(['Frequencies (GZ)'], ascending = True, inplace = True)
         s2p_frame=s2p_frame.reset_index(drop=True)
         return s2p_frame
   
@@ -300,7 +298,7 @@ class csvGenerator(ReportGenerator):
         if self.process_type == 'sidelobe':
             directory_path = self.ff_sidelobe_path
             logger.info('processing side lobe Data')
-            colHeader = ['Theta_deg','phi','xpd','Sidelobe_1_dBc','Sidelobe_1_deg','Sidelobe_2_dBc','Sidelobe_2_deg','pol','frequency']
+            colHeader = ['Theta_deg','phi','xpd','Sidelobe_1_dBc','Sidelobe_1_deg','Sidelobe_2_dBc','Sidelobe_2_deg','pol','frequency','Gain_dBi']
         elif self.process_type =='firstpass':
             colHeader = ['frequency','Gain_dBi','pol'] #read the appropriate data to save memory         
         #print colHeader
@@ -342,16 +340,12 @@ class csvGenerator(ReportGenerator):
                         list.append(reduced_df)
         except:
                 raise RuntimeError ("invalid path to scorecard folder")
-      
-        
-        
-        
         csv_frame = pd.concat(list)
-        csv_frame.sort_values(by =['frequency','pol','Pattern_PHI','Pattern_THETA'], ascending = True, inplace = True)
+        csv_frame.sort(['frequency','pol','Pattern_PHI','Pattern_THETA'], ascending = True, inplace = True)
         csv_frame = csv_frame.reset_index( drop = True)
         return csv_frame     
     def generateSideLobe(self):
-        header = ['Pattern_FREQ_RX','Pattern_FREQ_TX','Pattern_LPA','Theta_deg','phi','xpd','Sidelobe_1_dBc','Sidelobe_1_deg','Sidelobe_2_dBc','Sidelobe_2_deg'] 
+        header = ['Pattern_FREQ_RX','Pattern_FREQ_TX','Pattern_LPA','Theta_deg','phi','xpd','Sidelobe_1_dBc','Sidelobe_1_deg','Sidelobe_2_dBc','Sidelobe_2_deg','Gain_dBi'] 
         self.csv_frame=self.process('sidelobe')
         self.csv_frame.to_csv(os.path.join(self.saveDirectory,self._getSerialNumber_(self.ff_sidelobe_path) + "_Sidelobe_Report_"+self.print_time+".csv"),columns = header)
         return self.csv_frame
@@ -420,6 +414,6 @@ if __name__ == "__main__":
     #my_report = ReportGenerator(sPath="C:\dev\Test3\ExportTest",bs="C:\dev\AAE000J170417056 (U7.47R6-01)\FF\RF_First_Pass\Broadside_DBW",obs="C:\dev\AAE000J170417056 (U7.47R6-01)\FF\RF_First_Pass\Off_Broadside",s2p = "K:\Public\Engineering\LabData\Ku Radial\Test Data\Ku 70cm\mTennaU7 (5.1 TFT)\mTCLA-170409-01 (Ku70TFT5.1-X2-C0)\Opt\dynBW_1_best",nf2ff='C:\dev\AAE000J170417056 (U7.47R6-01)\NF\RF_First_Pass (Using Jsons from U7.47R6-01)',type='firstpass')
     #my_report.generateReport()
     
-    my_reportsl = ReportGenerator(sPath="C:\dev\Test3\ExportTest",sl="C:\dev\AAE000J170503066 (U7.47R6-11)\RF_DVT_TC1\FF\Scan_Roll_Off_170520",type="sidelobe")
-    my_reportsl.generateReport()
-
+    #my_reportsl = ReportGenerator(sPath="C:\dev\Test3\ExportTest",sl="C:\dev\AAE000J170503066 (U7.47R6-11)\RF_DVT_TC1\FF\Scan_Roll_Off_170520",type="sidelobe")
+    #my_reportsl.generateReport()
+    
