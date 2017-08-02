@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from PyQt4.QtCore import QTimer
+
 
 # Form implementation generated from reading ui file 'reportGen.ui'
 #
@@ -19,7 +19,6 @@ the line PyQt4 import Qt cause pyinstaller to hang. Therefore, any method associ
 has been disabled
 """
 
-
 from PyQt4 import QtCore, QtGui
 import wx
 from LoggingUtil import XStream
@@ -29,9 +28,11 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from scProcessor import ReportGenerator,logger
 from PyQt4.QtCore import QTimer
-
+from distutils.version import StrictVersion
 import os
 import time
+import json
+import subprocess
 
 try:
     _fromUtf8 = QtCore.QString.fromUtf8
@@ -56,7 +57,7 @@ class Worker(QtCore.QThread):
         
     def run(self):
         self.emit(QtCore.SIGNAL("threadStart"))
-               
+             
 
 class Ui_Form(object):
     ff_sidelobe_path = ''
@@ -67,10 +68,11 @@ class Ui_Form(object):
         #self.current_time = QDateTime.currentDateTime()
         #self.print_time =datetime.now().strftime('%Y%m%d%H%M%S')
         print w,h
-
-        self.popupWin = QtGui.QMessageBox(Form)
-        self.popupWin.setWindowTitle('Warning')
-
+        self.nw_version = ""
+        self.lc_version = "1.1.1"
+        self.my_report_ff = object
+        self.my_report_sl = object
+            
         Form.setObjectName(_fromUtf8("Form"))
         Form.resize(w-50,h-100)
         self.tab2 = QtGui.QTabWidget(Form)
@@ -150,7 +152,7 @@ class Ui_Form(object):
         self.verticalLayout_2 = QtGui.QVBoxLayout(self.verticalLayoutWidget_2)
         self.verticalLayout_2.setMargin(0)
         self.verticalLayout_2.setObjectName(_fromUtf8("verticalLayout_2"))
-
+        
         """
         Default the mode to firstpass mode
         """
@@ -187,6 +189,23 @@ class Ui_Form(object):
         self.tab_2.setObjectName(_fromUtf8("tab_2"))
         self.tab2.addTab(self.tab_2, _fromUtf8(""))
         
+        self.updateButt = QtGui.QPushButton()
+        self.updateButt.setEnabled(0)
+        self.updateButt.setText("Install")
+        self.checkUpdateButt = QtGui.QPushButton()
+        self.checkUpdateButt.setText("check Update")
+        self.updateTE = QtGui.QTextEdit()
+        
+        self.verticalLayoutWidget_update = QtGui.QWidget(self.tab_2)
+        self.verticalLayoutWidget_update.setGeometry(QtCore.QRect(10,20,w/6,w/4))
+        self.verticalLayoutWidget_update.setObjectName(_fromUtf8("verticalLayoutWidget_update"))
+        self.verticalLayout_update = QtGui.QVBoxLayout(self.verticalLayoutWidget_update)
+        self.verticalLayout_update.setObjectName(_fromUtf8("verticalLayout_update"))
+        self.verticalLayout_update.addWidget(self.updateButt)
+        self.verticalLayout_update.addWidget(self.checkUpdateButt)
+        self.verticalLayout_update.addWidget(self.updateTE)
+        
+        
         self.verticalLayoutWidget_3 = QtGui.QWidget(self.tab)
         self.verticalLayoutWidget_3.setGeometry(QtCore.QRect(10,h/1.8, w/4.5, h/5))
         self.verticalLayoutWidget_3.setObjectName(_fromUtf8("verticalLayoutWidget_3"))
@@ -199,7 +218,6 @@ class Ui_Form(object):
         self.toolbarLayoutWiget = QtGui.QWidget(self.tab)
         self.toolbarLayoutWiget.setGeometry(QtCore.QRect(w/4,20,w/5,h/8))
         self.toolbar = NavigationToolbar(self.canvas,self.toolbarLayoutWiget)
-        
         
         #tab 2 section for table of sidelobes data
         self.verticalLayout_3.addWidget(self._console)
@@ -220,7 +238,10 @@ class Ui_Form(object):
         #QtCore.QObject.connect(self.ProcessSidelobeButt,QtCore.SIGNAL(_fromUtf8("clicked()")),self.processSideLobe)
         QtCore.QObject.connect(self.FirstpassOffBroadsideButt,QtCore.SIGNAL(_fromUtf8("clicked()")),self.openFirstpass_offbroadside)
         QtCore.QObject.connect(self.nf2ffButton,QtCore.SIGNAL(_fromUtf8("clicked()")),self.openNF2FF)
+        QtCore.QObject.connect(self.checkUpdateButt,QtCore.SIGNAL(_fromUtf8("clicked()")),self.check_version)
+        QtCore.QObject.connect(self.updateButt,QtCore.SIGNAL(_fromUtf8("clicked()")),self.update)
         
+       
         
     def retranslateUi(self, Form):
         Form.setWindowTitle(_translate("Form", "Post Process", None))
@@ -232,12 +253,11 @@ class Ui_Form(object):
         self.processFFButt.setText(_translate("Form", "Process First Pass", None))
         self.ProcessSidelobeButt.setText(_translate("Form", "Process Sidelobe", None))
         self.tab2.setTabText(self.tab2.indexOf(self.tab), _translate("Form", "Report Generator", None))
-        self.tab2.setTabText(self.tab2.indexOf(self.tab_2), _translate("Form", "", None))
+        self.tab2.setTabText(self.tab2.indexOf(self.tab_2), _translate("Form", "Update", None))
         # 2 threads for side lobe and first pass main method
         self.ffbee = Worker()
         QtCore.QObject.connect(self.ffbee,QtCore.SIGNAL("threadStart"),self.processFirstpass,QtCore.Qt.DirectConnection)
         QtCore.QObject.connect(self.processFFButt,QtCore.SIGNAL(_fromUtf8("clicked()")),self.ffbee.start)
-        #disable the process button when the thread is started to prevent overwriting 
         self.ffbee.finished.connect(self._restoreUi)
         
         self.slbee = Worker()
@@ -245,7 +265,41 @@ class Ui_Form(object):
         QtCore.QObject.connect(self.ProcessSidelobeButt,QtCore.SIGNAL(_fromUtf8("clicked()")),self.slbee.start)
         self.slbee.finished.connect(self._restoreUi)
        
+        self.dummyEmitter = QtCore.QObject()
+        QtCore.QObject.connect(self.dummyEmitter,QtCore.SIGNAL('draw'),self.draw)
+       
+    def check_version(self):
+        #read the version available on the local drive and the network drive to determine if an update should be implemented
+        logger.info("Current software version: " + self.lc_version)       
+        try:
+            with open(r'K:\Public\Engineering\LabData\users\khoa au\Executables\versions.txt','r') as networkVer:
+                #print networkVer.readline()
+                input = json.load(networkVer)
+            self.nw_version = str(input['reportGen'])
+            #self.nw_version = '1.1.2'    
+            #print self.nw_version['reportGen']
+        except IOError:
+            logger.exception('missing version.txt')
+            return
     
+        if StrictVersion(self.lc_version) < StrictVersion(str(self.nw_version)):
+            self.updateTE.setText(" A new version is available: " + self.nw_version + "\n Current version is: " + self.lc_version)
+            logger.info("new version is available")
+            self.updateButt.setEnabled(1)
+            
+        elif StrictVersion(self.lc_version) == StrictVersion(str(self.nw_version)):
+            self.updateTE.setText(" Everything is up to date" + '\n network version is: ' +self.nw_version + '\n local version is: ' + self.lc_version)
+            
+    def update(self):
+        #get current working directory
+        wd = os.getcwd()
+        wd = os.path.abspath(os.path.join(wd, os.pardir))
+        #run the updator
+        time.sleep(1)
+        #quitting the GUI
+        QtCore.QCoreApplication.instance().quit()
+        subprocess.Popen(['updater.bat', str(wd),self.nw_version] , shell=True)
+       
     def _timer(self): # a seperate thread to check for time and test conditions
         self.current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
@@ -259,12 +313,9 @@ class Ui_Form(object):
             self.ProcessSidelobeButt.setEnabled(0)
         else:
             self.ProcessSidelobeButt.setEnabled(1)
-        
     def _restoreUi(self):
-        
         logger.info(str(self.current_time) + " COMPLETED")
         
-    
     def checkFF(self):
         if self.ffCheckBox.isChecked():
             logger.info(" First Pass Generator Selected")
@@ -331,25 +382,29 @@ class Ui_Form(object):
         self.FirstpassOffBroadsideTE.setText(self.ff_sidelobe_path)
         logger.info( self.current_time +  ' opened a firstpass offbroadside foler')
         
-    def processFirstpass(self):
+    def processFirstpass(self):   
         try:
-            my_report = ReportGenerator(sPath=str(self.SaveDirTE.toPlainText()),bs= str(self.FirstpassSCVTE.toPlainText()),obs= str(self.FirstpassOffBroadsideTE.toPlainText()),s2p =str(self.FirstpassS2PTE.toPlainText()),nf2ff=str(self.nf2ffTE.toPlainText()),type='firstpass')
+            self.my_report_ff = ReportGenerator(sPath=str(self.SaveDirTE.toPlainText()),bs= str(self.FirstpassSCVTE.toPlainText()),obs= str(self.FirstpassOffBroadsideTE.toPlainText()),s2p =str(self.FirstpassS2PTE.toPlainText()),nf2ff=str(self.nf2ffTE.toPlainText()),type='firstpass')
             logger.info(self.current_time+ " Processing first-pass data")
-            my_report.generateReport()
+            self.my_report_ff.generateReport()
+            
+            
+            
             logger.info(self.current_time + " Generating plots based on data")
-            my_report.generatePlot()
-            logger.info(self.current_time+ ' First pass report succesfully generated and saved at ' + str(self.SaveDirTE.toPlainText()))
-            self.canvas.draw()
-            #print os.path.join(str(self.SaveDirTE.toPlainText()),'test.png')
-            plt.savefig(os.path.join(str(self.SaveDirTE.toPlainText()),str(my_report.ASN)+"_firstpass_report.png"))
+            self.dummyEmitter.emit(QtCore.SIGNAL('draw'))
         except:
             logger.exception("error in calling processFirstpass")
             
+    #get the plotting with Qpixmap back to the GUI mainthread        
+    def draw(self):
+        logger.info('going back to main thread to plot')
+        self.my_report_ff.generatePlot()
+        logger.info(self.current_time+ ' First pass report succesfully generated and saved at ' + str(self.SaveDirTE.toPlainText()))
     def processSideLobe(self):    
         try:
-            my_reportsl = ReportGenerator(sPath=str(self.SaveDirTE.toPlainText()),sl=str(self.SideLobeTE.toPlainText()),type="sidelobe")
+            self.my_report_sl = ReportGenerator(sPath=str(self.SaveDirTE.toPlainText()),sl=str(self.SideLobeTE.toPlainText()),type="sidelobe")
             logger.info(self.current_time+ " Processing sidelobe data")
-            my_reportsl.generateReport()
+            self.my_report_sl.generateReport()
             logger.info(self.current_time+ " Processing side-lobe data")
             logger.info(self.current_time+" Side Lobe report sucessfully generated and saved at  " + str(self.SaveDirTE.toPlainText()))
         except:
